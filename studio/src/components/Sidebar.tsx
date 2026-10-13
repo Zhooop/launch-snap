@@ -4,12 +4,16 @@ import {
   type LucideIcon,
   MoonIcon,
   PlayIcon,
+  PlusCircleIcon,
+  Smartphone,
   SmartphoneIcon,
   SunIcon,
   TabletIcon,
+  UploadIcon,
+  Sparkles,
 } from "lucide-react";
 import { RadioGroup as RadioGroupPrimitive } from "radix-ui";
-import type { ReactNode } from "react";
+import { type ReactNode, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -24,6 +28,7 @@ import type { DeviceType, StoreManifest } from "../manifest";
 import { DesignPanel } from "./DesignPanel";
 import { ExportPanel } from "./ExportPanel";
 import type { StripView } from "./Strip";
+import logoImg from "../assets/logo.png";
 
 /**
  * The device-type tabs, in display order. Each maps to the `type` the
@@ -67,6 +72,9 @@ export function Sidebar({
   onTemplate,
   onLayout,
   onScreenOnly,
+  onUploadScreenshots,
+  onAddScene,
+  onOpenStoreSimulator,
 }: {
   manifest: StoreManifest;
   deviceType: DeviceType;
@@ -94,14 +102,30 @@ export function Sidebar({
   onTemplate: (v: string) => void;
   onLayout: (v: string) => void;
   onScreenOnly: (v: boolean) => void;
+  onUploadScreenshots?: (files: FileList | File[]) => void;
+  onAddScene?: () => void;
+  onOpenStoreSimulator?: () => void;
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const typeDevices = manifest.devices.filter((d) => d.type === deviceType);
   return (
     <aside className="flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl border border-sidebar-border bg-sidebar text-sidebar-foreground">
-      <header className="flex h-14 shrink-0 items-center justify-between pr-3 pl-5">
-        <h1 className="text-base font-semibold tracking-tight select-none">
-          <span className="goldie-wordmark">goldie</span>
-        </h1>
+      <header className="flex h-16 shrink-0 items-center justify-between border-b border-sidebar-border/60 pr-3 pl-4 bg-sidebar/50 backdrop-blur-xs">
+        <div className="flex items-center gap-2.5 select-none">
+          <img
+            src={logoImg}
+            alt="LaunchSnap"
+            className="size-8 rounded-xl shadow-xs ring-1 ring-black/10 dark:ring-white/10 object-cover"
+          />
+          <div className="flex flex-col">
+            <h1 className="text-sm font-extrabold tracking-tight leading-tight select-none">
+              <span className="launchsnap-wordmark">LaunchSnap</span>
+            </h1>
+            <span className="text-[9px] font-semibold tracking-wider text-muted-foreground uppercase">
+              Studio Pro
+            </span>
+          </div>
+        </div>
         <div className="flex items-center gap-1">
           {/* Like the appearance button: shows the view a click switches to. */}
           <Button
@@ -123,6 +147,33 @@ export function Sidebar({
           </Button>
         </div>
       </header>
+
+      {/* Store Simulator Action Bar */}
+      {onOpenStoreSimulator ? (
+        <div className="px-5 pt-3.5">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onOpenStoreSimulator}
+            className="w-full relative flex items-center justify-between py-2 px-3 text-xs font-semibold rounded-xl border border-sky-500/30 bg-gradient-to-r from-sky-500/10 via-blue-500/5 to-indigo-500/10 text-foreground hover:bg-sky-500/15 hover:border-sky-500/60 shadow-xs transition group"
+            title="Preview how your app appears on the live App Store and Google Play"
+          >
+            <div className="flex items-center gap-2">
+              <div className="flex size-6 items-center justify-center rounded-lg bg-sky-500/20 text-sky-600 dark:text-sky-400">
+                <Smartphone className="size-3.5" />
+              </div>
+              <span className="font-bold">Store Live Simulator</span>
+            </div>
+            <span className="flex items-center gap-1.5 rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-bold text-sky-600 dark:text-sky-400">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-sky-500"></span>
+              </span>
+              LIVE
+            </span>
+          </Button>
+        </div>
+      ) : null}
 
       <div className="sidebar-scroll flex-1 overflow-y-auto">
         {/* Every tab always shows, so an iPhone-only setup still surfaces that
@@ -152,6 +203,47 @@ export function Sidebar({
             </RadioGroupPrimitive.Item>
           ))}
         </RadioGroupPrimitive.Root>
+
+        {/* Quick Upload / Add Screen bar */}
+        <div className="flex gap-2 px-5 pt-3">
+          {onUploadScreenshots ? (
+            <>
+              <input
+                type="file"
+                ref={fileInputRef}
+                multiple
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    onUploadScreenshots(e.target.files);
+                  }
+                }}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 gap-1.5 text-xs font-medium shadow-xs hover:border-primary"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <UploadIcon className="size-3.5 text-primary" />
+                Upload Images
+              </Button>
+            </>
+          ) : null}
+
+          {onAddScene ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs font-medium shadow-xs hover:border-primary"
+              onClick={onAddScene}
+            >
+              <PlusCircleIcon className="size-3.5" />
+              Add Screen
+            </Button>
+          ) : null}
+        </div>
         {typeDevices.length > 1 || manifest.locales.length > 1 ? (
           <div className="flex flex-col gap-4 p-5">
             {typeDevices.length > 1 ? (

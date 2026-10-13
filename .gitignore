@@ -10,7 +10,12 @@ goldie.config.ts
 goldie.design.json
 
 # Generated assets: screenshots, previews, staged frames, export bundles
-out/
+out/*
+!out/web/
+out/web/*
+!out/web/robots.txt
+!out/web/sitemap.xml
+!out/web/*.html
 
 # npm build output
 dist

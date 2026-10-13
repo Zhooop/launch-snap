@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Camera, ChevronLeft, ChevronRight, Copy, PlusCircle, Trash2, X } from "lucide-react";
 import { AnimatePresence, Reorder } from "motion/react";
 import type React from "react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -107,6 +107,10 @@ export function Strip({
   sceneLayouts,
   onSceneLayout,
   view,
+  onUploadScreenshot,
+  onAddScene,
+  onDeleteScene,
+  onDuplicateScene,
 }: {
   design: Design;
   captures: DeviceCaptures;
@@ -128,6 +132,10 @@ export function Strip({
   sceneLayouts: Record<string, string>;
   onSceneLayout: (sceneId: string, key: string | undefined) => void;
   view: StripView;
+  onUploadScreenshot?: (sceneId: string, file: File) => void;
+  onAddScene?: () => void;
+  onDeleteScene?: (sceneId: string) => void;
+  onDuplicateScene?: (sceneId: string) => void;
 }) {
   const theme = design.theme;
   const frameGeometry = FRAMES[tileSpec.key as keyof typeof FRAMES] ?? FRAMES["iphone-6.9"];
@@ -178,9 +186,9 @@ export function Strip({
       ? "#5A6A7D"
       : theme.subheadColor;
 
-  const shots = scenes.flatMap((scene) => {
-    const capture = captures.screenshots.find((s) => s.sceneId === scene.id);
-    return capture ? [{ scene, capture }] : [];
+  const shots = scenes.map((scene) => {
+    const capture = captures?.screenshots?.find((s) => s.sceneId === scene.id);
+    return { scene, capture: capture ?? { sceneId: scene.id, url: "" } };
   });
 
   const segments =
@@ -315,6 +323,7 @@ export function Strip({
     return (
       <Tile
         key={entry.key}
+        sceneId={entry.sceneId}
         draggable={entry.sceneId !== undefined}
         width={entry.width}
         height={entry.height}
@@ -324,6 +333,19 @@ export function Strip({
         onOpen={() => {
           if (!dragged.current) setOpen(i);
         }}
+        onUpload={
+          entry.sceneId && onUploadScreenshot
+            ? (file) => onUploadScreenshot(entry.sceneId!, file)
+            : undefined
+        }
+        onDuplicate={
+          entry.sceneId && onDuplicateScene
+            ? () => onDuplicateScene(entry.sceneId!)
+            : undefined
+        }
+        onDelete={
+          entry.sceneId && onDeleteScene ? () => onDeleteScene(entry.sceneId!) : undefined
+        }
         // Named only while the lightbox is closed: once open, the scene inside
         // it carries the name, and a duplicate would abort the transition.
         transitionName={named === i && open === null ? "lightbox-scene" : undefined}
@@ -366,6 +388,13 @@ export function Strip({
   useEffect(() => {
     if (page > pages - 1) setPage(pages - 1);
   }, [page, pages]);
+  const prevCount = useRef(entries.length);
+  useEffect(() => {
+    if (entries.length > prevCount.current && pages > 1) {
+      setPage(pages - 1);
+    }
+    prevCount.current = entries.length;
+  }, [entries.length, pages]);
   useEffect(() => {
     if (open !== null && open > entries.length - 1) {
       setOpenState(null);
@@ -387,8 +416,10 @@ export function Strip({
   const visible = pageCells[Math.min(page, pages - 1)];
   const visibleIds = visible.flatMap((c) => (c.sceneId ? [c.sceneId] : []));
   const reorderPage = reorderWithin(visibleIds);
+  const usedInPage = visible.reduce((n, c) => n + c.tiles.length, 0);
+  const showAddTileInStrip = Boolean(onAddScene && page === pages - 1 && usedInPage < PAGE_SIZE);
   // Pad the last page so tiles keep the same width as on a full page.
-  const columns = pages > 1 ? PAGE_SIZE : entries.length;
+  const columns = pages > 1 ? PAGE_SIZE : (showAddTileInStrip ? usedInPage + 1 : entries.length);
 
   return (
     <div className="flex w-full flex-col gap-3">
@@ -434,6 +465,19 @@ export function Strip({
               </li>
             ),
           )}
+          {onAddScene ? (
+            <li className="min-w-0" style={{ flex: `0 0 ${cellBasis(1)}` }}>
+              <button
+                type="button"
+                onClick={onAddScene}
+                className="flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-card/40 p-6 text-muted-foreground transition hover:border-primary hover:bg-card hover:text-foreground"
+                style={{ aspectRatio: `${tileSpec.screenshot.width} / ${tileSpec.screenshot.height}` }}
+              >
+                <PlusCircle className="size-8" />
+                <span className="mt-2 text-xs font-semibold">Add Screen</span>
+              </button>
+            </li>
+          ) : null}
         </Reorder.Group>
       ) : (
         <div className="relative">
@@ -486,6 +530,19 @@ export function Strip({
                     <li key={entries[cell.tiles[0]].key}>{tileAt(cell.tiles[0])}</li>
                   ),
                 )}
+                {showAddTileInStrip ? (
+                  <li className="min-w-0">
+                    <button
+                      type="button"
+                      onClick={onAddScene}
+                      className="flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-card/40 p-6 text-muted-foreground transition hover:border-primary hover:bg-card hover:text-foreground"
+                      style={{ aspectRatio: `${tileSpec.screenshot.width} / ${tileSpec.screenshot.height}` }}
+                    >
+                      <PlusCircle className="size-8 text-primary" />
+                      <span className="mt-2 text-xs font-semibold">Add Screen</span>
+                    </button>
+                  </li>
+                ) : null}
               </Reorder.Group>
             </AnimatePresence>
           </div>
@@ -919,23 +976,40 @@ function DeviceView({
       >
         {captureUrl ? (
           <img
-            src={`/${captureUrl}`}
+            src={
+              captureUrl.startsWith("blob:") ||
+              captureUrl.startsWith("data:") ||
+              captureUrl.startsWith("http") ||
+              captureUrl.startsWith("/")
+                ? captureUrl
+                : `/${captureUrl}`
+            }
             alt=""
             draggable={false}
             style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
           />
         ) : (
           <div
-            className="grid h-full w-full place-items-center border-4 border-dashed border-neutral-500 bg-neutral-800 text-center text-neutral-300"
-            style={{ fontSize: "3cqw", padding: "4cqw" }}
+            className="flex h-full w-full flex-col items-center justify-center border-2 border-dashed border-neutral-700 bg-neutral-900/90 text-center p-3 text-neutral-300"
           >
-            no capture for {missing}
+            <Camera className="size-8 text-neutral-400 mb-2 opacity-80" />
+            <span style={{ fontSize: "3cqw", fontWeight: 600 }}>Empty Screen</span>
+            <span style={{ fontSize: "2.2cqw" }} className="text-neutral-400 mt-1">
+              {missing ? `Missing ${missing}` : "Hover tile for options"}
+            </span>
           </div>
         )}
       </div>
       {frameUrl ? (
         <img
-          src={`/${frameUrl}`}
+          src={
+            frameUrl.startsWith("blob:") ||
+            frameUrl.startsWith("data:") ||
+            frameUrl.startsWith("http") ||
+            frameUrl.startsWith("/")
+              ? frameUrl
+              : `/${frameUrl}`
+          }
           alt=""
           draggable={false}
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
@@ -1071,6 +1145,10 @@ function Tile({
   onOpen,
   transitionName,
   draggable,
+  sceneId,
+  onUpload,
+  onDuplicate,
+  onDelete,
   children,
 }: {
   width: number;
@@ -1081,10 +1159,80 @@ function Tile({
   onOpen: () => void;
   transitionName?: string;
   draggable: boolean;
+  sceneId?: string;
+  onUpload?: (file: File) => void;
+  onDuplicate?: () => void;
+  onDelete?: () => void;
   children: ReactNode;
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.[0] && onUpload) {
+      onUpload(e.target.files[0]);
+    }
+  };
+
   return (
-    <div className={`min-w-0 flex-1 ${overLimit ? "opacity-40" : ""}`}>
+    <div
+      data-scene-id={sceneId}
+      className={`group/tile relative min-w-0 flex-1 ${overLimit ? "opacity-40" : ""}`}
+    >
+      {sceneId ? (
+        <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1.5 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100">
+          {onUpload ? (
+            <>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+              />
+              <button
+                type="button"
+                title="Change Screenshot"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  fileInputRef.current?.click();
+                }}
+                className="grid size-7 place-items-center rounded-full bg-background/90 text-foreground shadow-sm backdrop-blur transition hover:bg-background hover:scale-105"
+              >
+                <Camera className="size-3.5" />
+              </button>
+            </>
+          ) : null}
+
+          {onDuplicate ? (
+            <button
+              type="button"
+              title="Duplicate Scene"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDuplicate();
+              }}
+              className="grid size-7 place-items-center rounded-full bg-background/90 text-foreground shadow-sm backdrop-blur transition hover:bg-background hover:scale-105"
+            >
+              <Copy className="size-3.5" />
+            </button>
+          ) : null}
+
+          {onDelete ? (
+            <button
+              type="button"
+              title="Delete Scene"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              className="grid size-7 place-items-center rounded-full bg-destructive/90 text-destructive-foreground shadow-sm backdrop-blur transition hover:bg-destructive hover:scale-105"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       <button
         type="button"
         aria-label={

@@ -12,22 +12,86 @@ export function EmptyState({
   title,
   body,
   command,
+  onUploadFiles,
 }: {
   icon: LucideIcon;
   title: string;
   body?: ReactNode;
   command?: string;
+  onUploadFiles?: (files: FileList | File[]) => void;
 }) {
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0 && onUploadFiles) {
+      onUploadFiles(e.dataTransfer.files);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0 && onUploadFiles) {
+      onUploadFiles(e.target.files);
+    }
+  };
+
   return (
     <div className="grid h-full place-items-center px-10 text-center">
-      <div className="flex max-w-sm flex-col items-center">
+      <div className="flex max-w-md flex-col items-center">
         <div className="mb-4 grid size-12 place-items-center rounded-2xl border border-border bg-background text-muted-foreground shadow-xs">
           <Icon className="size-5" strokeWidth={1.75} aria-hidden />
         </div>
-        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+        <h2 className="text-base font-semibold text-foreground">{title}</h2>
         {body ? (
           <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">{body}</p>
         ) : null}
+
+        {onUploadFiles ? (
+          <div
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`mt-6 flex w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 transition-colors ${
+              isDragging
+                ? "border-primary bg-primary/10"
+                : "border-border bg-card/50 hover:border-primary/50 hover:bg-card"
+            }`}
+          >
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              multiple
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+            />
+            <div className="rounded-full bg-primary/10 p-3 text-primary">
+              <Icon className="size-6" />
+            </div>
+            <p className="mt-3 text-sm font-medium text-foreground">
+              Click to upload or drag & drop screenshots
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              PNG, JPG or WebP (Portrait phone screens)
+            </p>
+            <Button size="sm" className="mt-4 pointer-events-none">
+              Select Images
+            </Button>
+          </div>
+        ) : null}
+
         {command ? <CommandChip command={command} /> : null}
       </div>
     </div>

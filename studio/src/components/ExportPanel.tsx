@@ -2,12 +2,12 @@ import { DownloadIcon, Loader2Icon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CUSTOM_TEMPLATE } from "../App";
+import { exportTilesToZip } from "../lib/clientExport";
 
 /**
- * The one place the goldie CLI runs: Export re-renders the screenshots and
- * the preview video from the raw captures with the current design, zips them,
- * and hands the browser the zip. Streams the CLI log while it runs (the video
- * render takes a while). Served by `goldie studio` and the Vite dev server alike (src/studio-server.ts).
+ * Handles exporting screenshots to ZIP:
+ * 1. Primary: Fast in-browser high-res HTML/Canvas export using exportTilesToZip (works standalone on web)
+ * 2. Secondary: CLI backend export via /api/export if running locally
  */
 export function ExportPanel({
   background,
@@ -31,15 +31,42 @@ export function ExportPanel({
   const [log, setLog] = useState<string | null>(null);
   const logRef = useRef<HTMLPreElement>(null);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll whenever the log text changes
   useEffect(() => {
     logRef.current?.scrollTo(0, logRef.current.scrollHeight);
   }, [log]);
 
-  async function exportZip() {
+  async function exportBrowserZip() {
     if (busy) return;
+    const tiles = Array.from(document.querySelectorAll<HTMLElement>(".tile-shadow"));
+    if (tiles.length === 0) {
+      setLog("No screenshots rendered on stage to export.");
+      return;
+    }
+
     setBusy(true);
-    setLog("");
+    setLog("Starting high-resolution browser export...");
+
+    try {
+      const fileNames = tiles.map((el, i) => {
+        const sceneId = el.closest("[data-scene-id]")?.getAttribute("data-scene-id");
+        return sceneId ? `0${i + 1}_${sceneId}.png` : `0${i + 1}_screenshot.png`;
+      });
+
+      await exportTilesToZip(tiles, fileNames, (progress) => {
+        setLog(progress.status);
+      });
+
+      setLog(null);
+    } catch (err) {
+      setLog(`Browser export error: ${err instanceof Error ? err.message : err}. Trying server CLI...`);
+      await exportServerZip();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function exportServerZip() {
+    setBusy(true);
     let text = "";
     try {
       const res = await fetch("/api/export", {
@@ -83,7 +110,7 @@ export function ExportPanel({
   return (
     <div className="flex flex-col gap-3">
       {log !== null && !busy ? (
-        <p className="text-[12px] text-destructive">Export failed.</p>
+        <p className="text-[12px] text-destructive">Export status</p>
       ) : null}
 
       {log !== null ? (
@@ -95,16 +122,21 @@ export function ExportPanel({
         </pre>
       ) : null}
 
-      <Button size="lg" className="w-full" onClick={() => void exportZip()} disabled={busy}>
+      <Button
+        size="lg"
+        className="w-full rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:via-indigo-500 hover:to-purple-500 text-white font-bold shadow-md hover:shadow-xl transition-all duration-200 py-3"
+        onClick={() => void exportBrowserZip()}
+        disabled={busy}
+      >
         {busy ? (
           <>
-            <Loader2Icon className="animate-spin" />
-            Exporting…
+            <Loader2Icon className="animate-spin size-4" />
+            <span>Exporting Pack…</span>
           </>
         ) : (
           <>
-            <DownloadIcon />
-            Export screenshots
+            <DownloadIcon className="size-4" />
+            <span>Download Store Pack (.ZIP)</span>
           </>
         )}
       </Button>
